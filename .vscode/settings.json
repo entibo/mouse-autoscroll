@@ -1,0 +1,23 @@
+{
+  "files.associations": {
+    "compare": "c",
+    "format": "c",
+    "limits": "c",
+    "ratio": "c",
+    "regex": "c",
+    "barrier": "c",
+    "bit": "c",
+    "chrono": "c",
+    "complex": "c",
+    "functional": "c",
+    "string_view": "c",
+    "random": "c",
+    "istream": "c",
+    "latch": "c",
+    "numeric": "c",
+    "semaphore": "c",
+    "stacktrace": "c",
+    "valarray": "c",
+    "algorithm": "c"
+  }
+}

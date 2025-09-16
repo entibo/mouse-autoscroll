@@ -1,0 +1,8 @@
+[Desktop Entry]
+Categories=System
+Type=Application
+Terminal=false
+StartupNotify=true
+Icon=/usr/share/icons/Adwaita/symbolic/devices/input-mouse-symbolic.svg
+Name=Mouse Autoscroll
+Exec=/home/entibo/wsl/mouse-autoscroll/mouse-autoscroll /dev/input/by-id/usb-YICHIP_Trust_Wireless_Mouse-if01-event-mouse
