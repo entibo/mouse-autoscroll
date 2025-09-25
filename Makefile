@@ -1,6 +1,6 @@
 CC := gcc
-XFLAGS := -Wall -std=c11
-CFLAGS := $(XFLAGS) $(shell pkg-config --libs --cflags libevdev)
+XFLAGS := -Wall -std=c11 -lm
+CFLAGS := $(XFLAGS) $(shell pkg-config --libs --cflags libevdev dbus-1)
 
 .PHONY: build clean
 

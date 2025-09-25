@@ -18,6 +18,7 @@
     "semaphore": "c",
     "stacktrace": "c",
     "valarray": "c",
-    "algorithm": "c"
+    "algorithm": "c",
+    "cstdint": "c"
   }
 }
