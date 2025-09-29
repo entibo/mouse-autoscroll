@@ -13,7 +13,7 @@ Enable an autoscroll mechanism for your mouse, similar to middle-click in web br
 
 # Compile
 
-Requirements: install `libevdev` and `gcc` using your package manager
+Requirements: install `libevdev`, `libinput` and `gcc` using your package manager
 
 ```sh
 make build

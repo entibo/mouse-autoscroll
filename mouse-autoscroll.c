@@ -19,7 +19,7 @@
 #define HANDLE_EVENT_DROP 1
 
 #define DEADZONE 15
-#define TICK_INTERVAL_US 1000
+#define TICK_INTERVAL_US 3000
 #define DPI 1000
 
 int btn_primary = BTN_LEFT;
@@ -151,6 +151,8 @@ void scroll_multiple(int is_vertical, int value)
 #define STATE_SCROLLING 2
 #define STATE_SCROLLING_DISCRETE 3
 #define STATE_ACTION_WAITING 4
+#define STATE_KANDO 5
+#define STATE_KANDO_MOVED 6
 
 mouse_accel_t accel;
 int primary_pressed = 0;
@@ -160,6 +162,7 @@ int dx = 0, dy = 0;
 int dir_x = 0, dir_y = 0;
 double scroll_x = 0, scroll_y = 0;
 double vel_x = 0, vel_y = 0;
+double vel_boost = 0;
 uint64_t time_accumulator_us = 0;
 uint64_t last_moved = 0;
 uint64_t scroll_start_us = 0;
@@ -169,7 +172,7 @@ double delta_to_scroll_speed(double v)
     // v = v - DEADZONE;
     if (v <= 0)
         return 0;
-    return 0.2;
+    return 0.8;
     if (v < 50)
         return 0.7;
     return 0.7 + (v - 50) / 50;
@@ -191,15 +194,33 @@ void tick()
 
     double f = (double)delta_us / 1000.0;
 
-    double vel_update_rate = 0.05 * fmin(1, (double)(t - scroll_start_us) / (100 * 1000));
+    if (f >= 5)
+    {
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
 
-    double target_vel_y = delta_to_scroll_speed((double)abs(dy)) * sign(dy);
+        char buf[100];
+        // Example: "2025-09-26 14:35:12"
+        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", t);
+
+        printf("%s: Timer interval was %.1f time slower than expected!\n", buf, f);
+    }
+
+    double vel_update_rate = 0.02 * fmin(1, (double)(t - scroll_start_us) / (double)(100 * 1000));
+
+    double target_vel = 0.5 + (vel_boost * 0.1);
+
+    double target_vel_y = dy == 0 ? 0 : sign(dy) * target_vel;
     vel_y = vel_y + (vel_update_rate * f) * ((double)(target_vel_y)-vel_y);
     scroll_y += vel_y * f;
 
-    double target_vel_x = delta_to_scroll_speed((double)abs(dx)) * sign(dx);
+    double target_vel_x = dx == 0 ? 0 : sign(dx) * target_vel;
     vel_x = vel_x + (vel_update_rate * f) * ((double)(target_vel_x)-vel_x);
     scroll_x += vel_x * f;
+
+    // printf("vel_boost: %.2f\n", vel_boost);
+
+    vel_boost = vel_boost + (0.01 * f) * (0 - vel_boost);
 
     // printf("vel_y: %.2f\n", vel_y);
     // printf("scroll_y: (before) %.2f (after) %.2f (+= %.2f) | scroll by %d\n",
@@ -232,9 +253,14 @@ int handle_primary_press()
 
     if (state == STATE_SCROLLING_WAITING)
     {
-        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_SPACE, 1);
-        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_SPACE, 0);
+        // Trigger Kando menu
+        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
+        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 1);
+        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 0);
+        libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
         libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+        state = STATE_KANDO;
+        printf("state = STATE_KANDO\n");
         return HANDLE_EVENT_DROP;
     }
     if (state == STATE_SCROLLING)
@@ -257,6 +283,7 @@ int handle_secondary_press()
     secondary_pressed = 1;
     dx = 0;
     dy = 0;
+    vel_boost = 0;
     dir_x = 0;
     dir_y = 0;
     last_moved = now_us();
@@ -268,6 +295,20 @@ int handle_secondary_press()
 int handle_secondary_release()
 {
     secondary_pressed = 0;
+
+    if (state == STATE_KANDO)
+    {
+        state = STATE_WAITING_FOR_SECONDARY_PRESS;
+        printf("state = STATE_WAITING_FOR_SECONDARY_PRESS\n");
+        return HANDLE_EVENT_DROP;
+    }
+    if (state == STATE_KANDO_MOVED)
+    {
+        libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_primary, 0);
+        state = STATE_WAITING_FOR_SECONDARY_PRESS;
+        printf("state = STATE_WAITING_FOR_SECONDARY_PRESS\n");
+        return HANDLE_EVENT_DROP;
+    }
 
     if (state == STATE_SCROLLING)
     {
@@ -311,16 +352,30 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us)
     // printf("velocity_us: %.6f | velocity_ms: %.6f | Accel factor: %.6f\n",
     //        velocity, velocity * 1000, accel_factor);
 
+    if (state == STATE_KANDO)
+    {
+        libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_primary, 1);
+        state = STATE_KANDO_MOVED;
+        printf("state = STATE_KANDO_MOVED\n");
+        return HANDLE_EVENT_REEMIT;
+    }
+    if (state == STATE_KANDO_MOVED)
+    {
+        return HANDLE_EVENT_REEMIT;
+    }
+
     if (state == STATE_SCROLLING_WAITING || state == STATE_SCROLLING)
     {
+        // printf("accel_factor: %.2f\n", accel_factor);
         if (abs(dir_y) >= abs(dir_x))
         {
             if (sign(dy) != sign(dir_y))
             {
                 dy = 0;
+                vel_boost = 0;
             }
-            dy += value;
-            scroll_y += value * accel_factor * 4;
+            dy += value * accel_factor;
+            // scroll_y += value * accel_factor * 1;
             dx = 0;
         }
         else
@@ -328,11 +383,13 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us)
             if (sign(dx) != sign(dir_x))
             {
                 dx = 0;
+                vel_boost = 0;
             }
-            dx += value;
-            scroll_x += value * accel_factor * 4;
+            dx += value * accel_factor;
+            // scroll_x += value * accel_factor * 1;
             dy = 0;
         }
+        vel_boost = max(0, vel_boost + abs(value) * accel_factor - 0.5);
         // printf("dy=%d; dir_y=%d\n", dy, dir_y);
     }
 
@@ -356,8 +413,14 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us)
 
 int handle_scroll(int is_vertical, int value)
 {
-    printf("Scroll (%2d)\n", value);
-    return HANDLE_EVENT_REEMIT;
+    // printf("Scroll (%2d)\n", value);
+    // Trigger Kando menu
+    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
+    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F13, 1);
+    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F13, 0);
+    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
+    libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+    return HANDLE_EVENT_DROP;
 }
 
 //
