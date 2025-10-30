@@ -208,7 +208,7 @@ void tick()
 
     double vel_update_rate = 0.02 * fmin(1, (double)(t - scroll_start_us) / (double)(100 * 1000));
 
-    double target_vel = 0.5 + (vel_boost * 0.1);
+    double target_vel = 1.5 + (vel_boost * 0.1);
 
     double target_vel_y = dy == 0 ? 0 : sign(dy) * target_vel;
     vel_y = vel_y + (vel_update_rate * f) * ((double)(target_vel_y)-vel_y);
