@@ -19,7 +19,8 @@
 #define HANDLE_EVENT_DROP 1
 
 #define DEADZONE 15
-#define TICK_INTERVAL_US 3000
+#define TICK_INTERVAL_US 8000
+#define CLICK_SECONDARY_DELAY_US 20000
 #define DPI 1000
 
 int btn_primary = BTN_LEFT;
@@ -157,6 +158,7 @@ void scroll_multiple(int is_vertical, int value)
 mouse_accel_t accel;
 int primary_pressed = 0;
 int secondary_pressed = 0;
+uint64_t click_secondary_pressed_at_us = 0;
 int state = STATE_WAITING_FOR_SECONDARY_PRESS;
 int dx = 0, dy = 0;
 int dir_x = 0, dir_y = 0;
@@ -183,8 +185,16 @@ double delta_to_scroll_speed(double v)
 
 void tick()
 {
+    int do_syn = 0;
     static uint64_t last = 0;
     uint64_t t = now_us();
+
+    if (click_secondary_pressed_at_us > 0 && (t - click_secondary_pressed_at_us) > CLICK_SECONDARY_DELAY_US)
+    {
+        click_secondary_pressed_at_us = 0;
+        libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_secondary, 0);
+        do_syn = 1;
+    }
 
     if (last == 0)
         last = t;
@@ -194,7 +204,7 @@ void tick()
 
     double f = (double)delta_us / 1000.0;
 
-    if (f >= 5)
+    if (0 && f >= 5)
     {
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
@@ -208,7 +218,7 @@ void tick()
 
     double vel_update_rate = 0.02 * fmin(1, (double)(t - scroll_start_us) / (double)(100 * 1000));
 
-    double target_vel = 1.5 + (vel_boost * 0.1);
+    double target_vel = 1.2 + (vel_boost * 0.1);
 
     double target_vel_y = dy == 0 ? 0 : sign(dy) * target_vel;
     vel_y = vel_y + (vel_update_rate * f) * ((double)(target_vel_y)-vel_y);
@@ -226,7 +236,6 @@ void tick()
     // printf("scroll_y: (before) %.2f (after) %.2f (+= %.2f) | scroll by %d\n",
     //        scroll_y, scroll_y - trunc(scroll_y), vel_y * f,
     //        (int)trunc(scroll_y));
-    int do_syn = 0;
     if (abs(scroll_y) >= 1)
     {
         double scroll_value = trunc(scroll_y);
@@ -322,9 +331,10 @@ int handle_secondary_release()
     if (state == STATE_SCROLLING_WAITING)
     { // Press secondary button and re-emit the release
         libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_secondary, 1);
+        click_secondary_pressed_at_us = now_us();
         state = STATE_WAITING_FOR_SECONDARY_PRESS;
         printf("state = STATE_WAITING_FOR_SECONDARY_PRESS\n");
-        return HANDLE_EVENT_REEMIT;
+        return HANDLE_EVENT_DROP;
     }
     return HANDLE_EVENT_DROP;
 }
@@ -374,7 +384,7 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us)
                 dy = 0;
                 vel_boost = 0;
             }
-            dy += value * accel_factor;
+            dy += value * accel_factor * 1.5;
             // scroll_y += value * accel_factor * 1;
             dx = 0;
         }
@@ -390,7 +400,7 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us)
             dy = 0;
         }
         vel_boost = max(0, vel_boost + abs(value) * accel_factor - 0.5);
-        // printf("dy=%d; dir_y=%d\n", dy, dir_y);
+        printf("dy=%d; dir_y=%d\n", dy, dir_y);
     }
 
     if (state == STATE_SCROLLING_WAITING)
