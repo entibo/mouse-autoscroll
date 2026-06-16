@@ -245,6 +245,24 @@ void tick() {
   last = t;
 }
 
+void focus_window_under_cursor() {
+  // Hold Meta + Primary Click to focus window in GNOME
+
+  struct timespec ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = 1 * 1 * 1000 * 1000;
+
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
+  libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+  libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_primary, 1);
+  libevdev_uinput_write_event(mouse_uinput, EV_SYN, SYN_REPORT, 0);
+  nanosleep(&ts, NULL);
+  libevdev_uinput_write_event(mouse_uinput, EV_KEY, btn_primary, 0);
+  libevdev_uinput_write_event(mouse_uinput, EV_SYN, SYN_REPORT, 0);
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
+  libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+}
+
 void back() {
   printf("back\n");
   libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTALT, 1);
@@ -417,12 +435,7 @@ int handle_move(int is_vertical, int value, uint64_t timestamp_us) {
 
 int handle_scroll(int is_vertical, int value) {
   // printf("Scroll (%2d)\n", value);
-  // Trigger Kando menu
-  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
-  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F13, 1);
-  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F13, 0);
-  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
-  libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+  focus_window_under_cursor();
   return HANDLE_EVENT_DROP;
 }
 
