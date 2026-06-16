@@ -144,6 +144,7 @@ void scroll_multiple(int is_vertical, int value) {
 #define STATE_ACTION_WAITING 4
 #define STATE_KANDO 5
 #define STATE_KANDO_MOVED 6
+#define STATE_BACK 10
 
 mouse_accel_t accel;
 int primary_pressed = 0;
@@ -244,18 +245,38 @@ void tick() {
   last = t;
 }
 
+void back() {
+  printf("back\n");
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTALT, 1);
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFT, 1);
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFT, 0);
+  libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTALT, 0);
+  libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+}
+
 int handle_primary_press() {
   primary_pressed = 1;
 
   if (state == STATE_SCROLLING_WAITING) {
-    // Trigger Kando menu
-    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
-    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 1);
-    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 0);
-    libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
-    libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
-    state = STATE_KANDO;
-    printf("state = STATE_KANDO\n");
+    if (0) { // Trigger Kando menu
+      libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 1);
+      libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 1);
+      libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_F12, 0);
+      libevdev_uinput_write_event(keyboard_uinput, EV_KEY, KEY_LEFTMETA, 0);
+      libevdev_uinput_write_event(keyboard_uinput, EV_SYN, SYN_REPORT, 0);
+      state = STATE_KANDO;
+      printf("state = STATE_KANDO\n");
+      return HANDLE_EVENT_DROP;
+    } else {
+      // Trigger back button (repeatable)
+      back();
+      state = STATE_BACK;
+      printf("state = STATE_BACK\n");
+      return HANDLE_EVENT_DROP;
+    }
+  }
+  if (state == STATE_BACK) {
+    back();
     return HANDLE_EVENT_DROP;
   }
   if (state == STATE_SCROLLING) {
@@ -288,6 +309,11 @@ int handle_secondary_press() {
 int handle_secondary_release() {
   secondary_pressed = 0;
 
+  if (state == STATE_BACK) {
+    state = STATE_WAITING_FOR_SECONDARY_PRESS;
+    printf("state = STATE_WAITING_FOR_SECONDARY_PRESS\n");
+    return HANDLE_EVENT_DROP;
+  }
   if (state == STATE_KANDO) {
     state = STATE_WAITING_FOR_SECONDARY_PRESS;
     printf("state = STATE_WAITING_FOR_SECONDARY_PRESS\n");
